@@ -17,12 +17,17 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Initialize database and expose via app.locals
-initialize().then((db) => {
+// Initialize database once per instance; requests wait for it (cold starts)
+const dbPromise = initialize().then((db) => {
   app.locals.db = db;
-  console.log('Database initialized');
-}).catch((err) => {
-  console.error('Database initialization failed:', err);
+  return db;
+});
+
+app.use((req, res, next) => {
+  dbPromise.then(() => next()).catch((err) => {
+    console.error('Database initialization failed:', err);
+    res.status(503).json({ error: 'Database not ready' });
+  });
 });
 
 app.use('/', indexRouter);

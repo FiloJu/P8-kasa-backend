@@ -5,9 +5,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-prod';
 function authenticate(req, res, next) {
   const auth = req.headers['authorization'] || '';
   const [scheme, token] = auth.split(' ');
-  if (scheme === 'Bearer' && token) {
+  const cookieToken = req.cookies && (req.cookies.token || req.cookies.access_token || req.cookies.auth_token);
+  const credential = scheme === 'Bearer' && token ? token : cookieToken;
+  if (credential) {
     try {
-      const payload = jwt.verify(token, JWT_SECRET);
+      const payload = jwt.verify(credential, JWT_SECRET);
       req.user = { id: payload.id, role: payload.role, name: payload.name, email: payload.email };
     } catch (e) {
       // invalid token -> ignore for authenticate(), but requireAuth will block

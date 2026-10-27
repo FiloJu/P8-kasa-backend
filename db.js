@@ -3,7 +3,10 @@ const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const { promisify } = require('util');
 
-const DB_PATH = path.join(__dirname, 'data', 'kasa.sqlite3');
+// Vercel's filesystem is read-only except /tmp (ephemeral, re-seeded on cold start)
+const DB_PATH = process.env.VERCEL
+  ? path.join('/tmp', 'kasa.sqlite3')
+  : path.join(__dirname, 'data', 'kasa.sqlite3');
 const PROPS_JSON_PATH = path.join(__dirname, 'data', 'properties.json');
 
 function openDb() {
@@ -96,9 +99,35 @@ async function initSchema(db) {
     FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS messaging_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    property_id TEXT NOT NULL,
+    client_id INTEGER NOT NULL,
+    owner_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(property_id, client_id, owner_id),
+    FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE,
+    FOREIGN KEY(client_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS messaging_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL,
+    sender_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(thread_id) REFERENCES messaging_threads(id) ON DELETE CASCADE,
+    FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_properties_host ON properties(host_id);
   CREATE INDEX IF NOT EXISTS idx_ratings_property ON ratings(property_id);
   CREATE INDEX IF NOT EXISTS idx_ratings_user ON ratings(user_id);
+  CREATE INDEX IF NOT EXISTS idx_messaging_threads_client ON messaging_threads(client_id, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_messaging_threads_owner ON messaging_threads(owner_id, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_messaging_messages_thread ON messaging_messages(thread_id, created_at);
   `;
 
   await db.execAsync(schema);
